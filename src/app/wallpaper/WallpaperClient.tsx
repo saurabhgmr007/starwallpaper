@@ -60,26 +60,12 @@ export default function WallpaperClient() {
         <BackgroundComponent />
       )}
       
-      {/* Hidden SVG Filter for Liquid Glass Refraction */}
-      <svg style={{ width: 0, height: 0, position: 'absolute' }}>
-        <defs>
-          <filter id="liquid-glass-filter" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="1" result="noise" />
-            <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.5 -0.2" in="noise" result="coloredNoise" />
-            <feDisplacementMap in="SourceGraphic" in2="coloredNoise" scale="12" xChannelSelector="R" yChannelSelector="G" result="displacement" />
-            <feGaussianBlur in="displacement" stdDeviation="0.5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
-      </svg>
-
       <div className="absolute inset-0 z-10 pointer-events-none p-12 overflow-hidden flex flex-col justify-end bg-gradient-to-t from-black/20 to-transparent">
         <div className="flex flex-col gap-8 max-w-2xl w-full mx-auto pb-12 items-start justify-end h-full">
           {notes.map((note) => (
             <div
               key={note.id}
               className="liquid-glass-note p-7 w-full flex items-start gap-5"
-              style={{ filter: 'url(#liquid-glass-filter)' }}
             >
               <div className="liquid-glass-note-content w-full flex items-start gap-5">
                 {note.selected && (
