@@ -60,26 +60,42 @@ export default function WallpaperClient() {
         <BackgroundComponent />
       )}
       
-      <div className="absolute inset-0 z-10 pointer-events-none p-12 overflow-hidden flex flex-col justify-end bg-gradient-to-t from-black/50 to-transparent">
-        <div className="flex flex-col gap-6 max-w-2xl w-full mx-auto pb-12 items-start justify-end h-full">
+      {/* Hidden SVG Filter for Liquid Glass Refraction */}
+      <svg style={{ width: 0, height: 0, position: 'absolute' }}>
+        <defs>
+          <filter id="liquid-glass-filter" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="1" result="noise" />
+            <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.5 -0.2" in="noise" result="coloredNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="coloredNoise" scale="12" xChannelSelector="R" yChannelSelector="G" result="displacement" />
+            <feGaussianBlur in="displacement" stdDeviation="0.5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+      </svg>
+
+      <div className="absolute inset-0 z-10 pointer-events-none p-12 overflow-hidden flex flex-col justify-end bg-gradient-to-t from-black/20 to-transparent">
+        <div className="flex flex-col gap-8 max-w-2xl w-full mx-auto pb-12 items-start justify-end h-full">
           {notes.map((note) => (
             <div
               key={note.id}
-              className="bg-black/60 backdrop-blur-md text-white p-6 rounded-2xl shadow-xl w-full transform transition-all flex items-start gap-4"
+              className="liquid-glass-note p-7 w-full flex items-start gap-5"
+              style={{ filter: 'url(#liquid-glass-filter)' }}
             >
-              {note.selected && (
-                <div className="mt-1 flex-shrink-0 text-yellow-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z"/>
-                  </svg>
-                </div>
-              )}
-              <div className="flex-1">
-                <div className="text-xl font-medium leading-relaxed">
-                  {note.text}
-                </div>
-                <div className="mt-3 text-sm text-gray-400 font-mono">
-                  {new Date(note.createdAt).toLocaleString()}
+              <div className="liquid-glass-note-content w-full flex items-start gap-5">
+                {note.selected && (
+                  <div className="mt-1 flex-shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(253,224,71,0.6)]">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z"/>
+                    </svg>
+                  </div>
+                )}
+                <div className="flex-1">
+                  <div className="text-2xl font-medium leading-relaxed text-white drop-shadow-md">
+                    {note.text}
+                  </div>
+                  <div className="mt-3 text-sm text-gray-200/80 font-mono tracking-wide">
+                    {new Date(note.createdAt).toLocaleString()}
+                  </div>
                 </div>
               </div>
             </div>
