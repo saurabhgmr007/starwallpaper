@@ -6,7 +6,8 @@ const files = [
   'Glassy mint.html',
   'Moonlit.html',
   'New York.html',
-  'Night sky.html'
+  'Night sky.html',
+  'Pixel matcha.html'
 ];
 
 const outDir = './src/components/backgrounds';
@@ -21,8 +22,8 @@ for (const file of files) {
 
   const html = fs.readFileSync(file, 'utf8');
 
-  // Remove the FeralUI branding tags if any
-  let cleanHtml = html.replace(/<g id="(Ethereal|NEW YORK|FeralUI)[^>]*>[\s\S]*?<\/g>/gi, '');
+  // Remove the FeralUI or specific text branding tags if any
+  let cleanHtml = html.replace(/<g id="(Ethereal|NEW YORK|FeralUI|Saudade)[^>]*>[\s\S]*?<\/g>/gi, '');
 
   const styleMatch = cleanHtml.match(/<style>([\s\S]*?)<\/style>/);
   const styleContent = styleMatch ? styleMatch[1] : '';

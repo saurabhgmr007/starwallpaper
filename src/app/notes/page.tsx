@@ -16,6 +16,7 @@ const BACKGROUNDS = [
   { id: 'Moonlit', name: 'Moonlit' },
   { id: 'NewYork', name: 'New York' },
   { id: 'Nightsky', name: 'Night sky' },
+  { id: 'Pixelmatcha', name: 'Pixel matcha' },
   { id: 'Custom', name: 'Custom Image URL' },
 ];
 
