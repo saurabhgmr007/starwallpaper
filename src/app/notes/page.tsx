@@ -17,6 +17,9 @@ const BACKGROUNDS = [
   { id: 'NewYork', name: 'New York' },
   { id: 'Nightsky', name: 'Night sky' },
   { id: 'Pixelmatcha', name: 'Pixel matcha' },
+  { id: 'Pixelobsidian', name: '✦ Pixel obsidian (Dark)' },
+  { id: 'Pixellavender', name: 'Pixel lavender' },
+  { id: 'Pixelember', name: 'Pixel ember' },
   { id: 'Custom', name: 'Custom Image URL' },
 ];
 
