@@ -10,6 +10,12 @@ type Note = {
   selected?: boolean;
 };
 
+type Payout = {
+  id: string;
+  date: string;
+  amount: number;
+};
+
 const BACKGROUNDS = [
   { id: 'Untitledblend', name: 'Untitled blend' },
   { id: 'Glassymint', name: 'Glassy mint' },
@@ -32,6 +38,17 @@ export default function NotesPage() {
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
 
+  // Payout state
+  const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [payoutGoal, setPayoutGoal] = useState(1000);
+  const [newPayoutDate, setNewPayoutDate] = useState('');
+  const [newPayoutAmount, setNewPayoutAmount] = useState('');
+  const [editingPayoutId, setEditingPayoutId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [goalInput, setGoalInput] = useState('');
+  const [payoutStatus, setPayoutStatus] = useState('');
+
   const fetchNotes = async () => {
     try {
       const res = await fetch('/api/notes', { cache: 'no-store' });
@@ -53,9 +70,25 @@ export default function NotesPage() {
     } catch (error) {}
   };
 
+  const fetchPayouts = async () => {
+    try {
+      const res = await fetch('/api/payouts', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.payouts)) setPayouts(data.payouts);
+        if (data.payoutGoal) {
+          const goal = Number(data.payoutGoal);
+          setPayoutGoal(goal);
+          setGoalInput(String(goal));
+        }
+      }
+    } catch (error) {}
+  };
+
   useEffect(() => {
     fetchNotes();
     fetchSettings();
+    fetchPayouts();
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') setIsDarkMode(true);
   }, []);
@@ -143,8 +176,119 @@ export default function NotesPage() {
     } catch (error) {}
   };
 
+  // ---- Payout handlers ----
+  const handleAddPayout = async () => {
+    if (!newPayoutDate || !newPayoutAmount) return;
+    setPayoutStatus('Adding...');
+    try {
+      const res = await fetch('/api/payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: newPayoutDate, amount: Number(newPayoutAmount), passcode }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayouts(data.payouts);
+        setNewPayoutDate('');
+        setNewPayoutAmount('');
+        setPayoutStatus('Added!');
+        setTimeout(() => setPayoutStatus(''), 2000);
+      } else {
+        const data = await res.json();
+        setPayoutStatus(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setPayoutStatus('Failed');
+    }
+  };
+
+  const handleEditPayout = async (id: string) => {
+    if (!editDate || !editAmount) return;
+    setPayoutStatus('Saving...');
+    try {
+      const res = await fetch('/api/payouts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, date: editDate, amount: Number(editAmount), passcode }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayouts(data.payouts);
+        setEditingPayoutId(null);
+        setPayoutStatus('Updated!');
+        setTimeout(() => setPayoutStatus(''), 2000);
+      } else {
+        const data = await res.json();
+        setPayoutStatus(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setPayoutStatus('Failed');
+    }
+  };
+
+  const handleDeletePayout = async (id: string) => {
+    setPayoutStatus('Deleting...');
+    try {
+      const res = await fetch('/api/payouts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, passcode }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayouts(data.payouts);
+        setPayoutStatus('Deleted!');
+        setTimeout(() => setPayoutStatus(''), 2000);
+      } else {
+        const data = await res.json();
+        setPayoutStatus(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setPayoutStatus('Failed');
+    }
+  };
+
+  const handleSaveGoal = async () => {
+    const newGoal = Number(goalInput);
+    if (!newGoal || newGoal <= 0) return;
+    try {
+      const res = await fetch('/api/payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payoutGoal: newGoal, passcode }),
+      });
+      if (res.ok) {
+        setPayoutGoal(newGoal);
+        setPayoutStatus('Goal updated!');
+        setTimeout(() => setPayoutStatus(''), 2000);
+      } else {
+        const data = await res.json();
+        setPayoutStatus(`Error: ${data.error}`);
+      }
+    } catch (error) {}
+  };
+
+  const startEditing = (payout: Payout) => {
+    setEditingPayoutId(payout.id);
+    setEditDate(payout.date);
+    setEditAmount(String(payout.amount));
+  };
+
+  // Sort payouts by date, newest first
+  const sortedPayouts = [...payouts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const totalPayout = payouts.reduce((sum, p) => sum + p.amount, 0);
+  const percentage = payoutGoal > 0 ? Math.min((totalPayout / payoutGoal) * 100, 100) : 0;
+
   // @ts-ignore
   const BackgroundComponent = Backgrounds[activeBackground] || Backgrounds.Untitledblend;
+
+  const inputClass = `w-full rounded-xl p-3 border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors ${
+    isDarkMode ? 'bg-black/30 border-white/10 text-white placeholder-white/30' : 'bg-white/50 border-black/10 text-black placeholder-black/30'
+  }`;
+
+  const smallInputClass = `rounded-lg px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors text-sm ${
+    isDarkMode ? 'bg-black/30 border-white/10 text-white placeholder-white/30' : 'bg-white/50 border-black/10 text-black placeholder-black/30'
+  }`;
 
   return (
     <div className={`min-h-screen relative font-sans pb-24 ${isDarkMode ? 'dark text-white' : 'text-gray-900'}`}>
@@ -177,6 +321,7 @@ export default function NotesPage() {
           </button>
         </div>
         
+        {/* Notes Form Panel */}
         <div className="liquid-glass-panel">
           <form onSubmit={handleSaveNote} className="liquid-glass-content p-8 space-y-6">
             <div>
@@ -185,9 +330,7 @@ export default function NotesPage() {
                 type="password"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                className={`w-full rounded-xl p-3 border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors ${
-                  isDarkMode ? 'bg-black/30 border-white/10 text-white placeholder-white/30' : 'bg-white/50 border-black/10 text-black placeholder-black/30'
-                }`}
+                className={inputClass}
                 placeholder="Enter passcode to make changes..."
                 required
               />
@@ -199,9 +342,7 @@ export default function NotesPage() {
                 <select
                   value={activeBackground}
                   onChange={(e) => handleChangeBackground(e.target.value)}
-                  className={`w-full rounded-xl p-3 border focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none transition-colors ${
-                    isDarkMode ? 'bg-black/30 border-white/10 text-white' : 'bg-white/50 border-black/10 text-black'
-                  }`}
+                  className={`${inputClass} appearance-none`}
                 >
                   {BACKGROUNDS.map(bg => (
                     <option key={bg.id} value={bg.id} className="text-black">{bg.name}</option>
@@ -218,9 +359,7 @@ export default function NotesPage() {
                     onChange={(e) => setCustomImageUrl(e.target.value)}
                     onBlur={() => handleChangeBackground('Custom', customImageUrl)}
                     placeholder="https://example.com/image.jpg"
-                    className={`w-full rounded-xl p-3 border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors ${
-                      isDarkMode ? 'bg-black/30 border-white/10 text-white placeholder-white/30' : 'bg-white/50 border-black/10 text-black placeholder-black/30'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
               )}
@@ -231,9 +370,7 @@ export default function NotesPage() {
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className={`w-full rounded-xl p-3 border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors resize-none ${
-                  isDarkMode ? 'bg-black/30 border-white/10 text-white placeholder-white/30' : 'bg-white/50 border-black/10 text-black placeholder-black/30'
-                }`}
+                className={`${inputClass} resize-none`}
                 rows={3}
                 placeholder="Type your note here..."
                 required
@@ -251,6 +388,172 @@ export default function NotesPage() {
           </form>
         </div>
 
+        {/* Payout Tracker Panel */}
+        <div className="liquid-glass-panel">
+          <div className="liquid-glass-content p-8">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h2 className="text-2xl font-bold drop-shadow-sm">Payout Tracker</h2>
+              </div>
+              {payoutStatus && <span className="text-sm font-medium opacity-80">{payoutStatus}</span>}
+            </div>
+
+            {/* Summary */}
+            <div className={`p-5 rounded-2xl border mb-6 ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white/30 border-white/40'}`}>
+              <div className="flex items-baseline justify-between mb-2">
+                <div>
+                  <span className="text-3xl font-bold tracking-tight">
+                    ${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                  <span className={`text-lg font-medium ml-1 ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
+                    / ${payoutGoal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <span className={`text-sm font-mono ${isDarkMode ? 'text-white/50' : 'text-black/50'}`}>
+                  {percentage.toFixed(1)}%
+                </span>
+              </div>
+              <div className={`w-full h-2 rounded-full overflow-hidden ${isDarkMode ? 'bg-white/10' : 'bg-black/10'}`}>
+                <div 
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ 
+                    width: `${percentage}%`,
+                    background: 'linear-gradient(90deg, #34d399, #10b981, #059669)',
+                    boxShadow: '0 0 12px rgba(52, 211, 153, 0.4)'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Goal Setting */}
+            <div className={`flex items-center gap-3 mb-6 pb-6 border-b ${isDarkMode ? 'border-white/10' : 'border-black/10'}`}>
+              <label className="text-sm font-semibold opacity-80 whitespace-nowrap">Goal ($)</label>
+              <input
+                type="number"
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                className={`${smallInputClass} flex-1`}
+                placeholder="1000"
+                min="1"
+              />
+              <button
+                onClick={handleSaveGoal}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isDarkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/5 hover:bg-black/10 text-black'
+                }`}
+              >
+                Set
+              </button>
+            </div>
+
+            {/* Add Payout */}
+            <div className="flex items-end gap-3 mb-6">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold mb-1.5 opacity-60">Date</label>
+                <input
+                  type="date"
+                  value={newPayoutDate}
+                  onChange={(e) => setNewPayoutDate(e.target.value)}
+                  className={smallInputClass + ' w-full'}
+                />
+              </div>
+              <div className="w-28">
+                <label className="block text-xs font-semibold mb-1.5 opacity-60">Amount ($)</label>
+                <input
+                  type="number"
+                  value={newPayoutAmount}
+                  onChange={(e) => setNewPayoutAmount(e.target.value)}
+                  className={smallInputClass + ' w-full'}
+                  placeholder="0"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <button
+                onClick={handleAddPayout}
+                className="bg-emerald-600/90 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5 whitespace-nowrap"
+              >
+                + Add
+              </button>
+            </div>
+
+            {/* Payout Records */}
+            <div className="space-y-2">
+              {sortedPayouts.length === 0 ? (
+                <p className="text-center opacity-60 py-6 text-sm font-medium">No payouts recorded yet.</p>
+              ) : (
+                sortedPayouts.map((payout) => (
+                  <div key={payout.id} className={`p-4 rounded-xl border transition-all ${
+                    isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white/40 border-white/40'
+                  }`}>
+                    {editingPayoutId === payout.id ? (
+                      /* Edit mode */
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          className={smallInputClass + ' flex-1'}
+                        />
+                        <input
+                          type="number"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          className={smallInputClass + ' w-24'}
+                          min="0"
+                          step="0.01"
+                        />
+                        <button
+                          onClick={() => handleEditPayout(payout.id)}
+                          className="text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingPayoutId(null)}
+                          className="text-xs font-semibold opacity-60 hover:opacity-100 transition-opacity"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      /* View mode */
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <span className="text-xs font-mono opacity-60">
+                            {new Date(payout.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                          <span className="font-semibold text-emerald-400">
+                            +${payout.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => startEditing(payout)}
+                            className={`text-xs font-semibold transition-colors ${isDarkMode ? 'text-white/40 hover:text-white/80' : 'text-black/40 hover:text-black/80'}`}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeletePayout(payout.id)}
+                            className="text-xs text-red-500 hover:text-red-400 font-semibold opacity-80 hover:opacity-100 transition-opacity"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Current Notes Panel */}
         <div className="liquid-glass-panel">
           <div className="liquid-glass-content p-8">
             <div className="flex justify-between items-center mb-6">
