@@ -293,9 +293,9 @@ export default function WallpaperClient() {
         )}
       </div>
 
-      {/* ========== SPOTIFY NOW PLAYING — BOTTOM LEFT ========== */}
+      {/* ========== SPOTIFY NOW PLAYING — BOTTOM LEFT (CLEARS DESKTOP ICONS) ========== */}
       {spotify.title && (
-        <div className="absolute bottom-14 left-10 z-20 pointer-events-none" 
+        <div className="absolute bottom-14 left-[210px] z-20 pointer-events-none" 
              style={{ animation: 'floatIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' }}>
           <div className="payout-tracker-card" style={{ width: '320px' }}>
             <div className="payout-tracker-content">
