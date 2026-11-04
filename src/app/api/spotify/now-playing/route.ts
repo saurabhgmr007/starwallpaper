@@ -56,7 +56,8 @@ export async function GET() {
     }
 
     if (!res.ok) {
-      return NextResponse.json({ isPlaying: false, error: res.status });
+      const errBody = await res.text();
+      return NextResponse.json({ isPlaying: false, error: res.status, message: errBody });
     }
 
     const data = await res.json();
