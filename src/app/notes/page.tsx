@@ -16,6 +16,36 @@ type Payout = {
   amount: number;
 };
 
+type WidgetCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+type WidgetLayout = {
+  'top-left': string[];
+  'top-right': string[];
+  'bottom-left': string[];
+  'bottom-right': string[];
+};
+
+const DEFAULT_LAYOUT: WidgetLayout = {
+  'top-left': [],
+  'top-right': ['payout', 'clock', 'weather'],
+  'bottom-left': ['spotify'],
+  'bottom-right': [],
+};
+
+const WIDGET_INFO: Record<string, { name: string; icon: string; desc: string }> = {
+  payout: { name: 'Payout Tracker', icon: '💰', desc: 'Goal & cumulative payouts' },
+  clock: { name: 'Clock', icon: '⏰', desc: 'Real-time 12h clock & date' },
+  weather: { name: 'Weather', icon: '🌤️', desc: 'Live temp & local forecast' },
+  spotify: { name: 'Spotify Music', icon: '🎵', desc: 'Now playing album & bars' },
+};
+
+const CORNERS: { id: WidgetCorner; label: string; icon: string }[] = [
+  { id: 'top-left', label: 'Top-Left', icon: '↖' },
+  { id: 'top-right', label: 'Top-Right', icon: '↗' },
+  { id: 'bottom-left', label: 'Bottom-Left', icon: '↙' },
+  { id: 'bottom-right', label: 'Bottom-Right', icon: '↘' },
+];
+
 const BACKGROUNDS = [
   { id: 'Untitledblend', name: 'Untitled blend' },
   { id: 'Glassymint', name: 'Glassy mint' },
@@ -37,6 +67,11 @@ export default function NotesPage() {
   const [activeBackground, setActiveBackground] = useState('Untitledblend');
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Widget Layout state
+  const [widgetLayout, setWidgetLayout] = useState<WidgetLayout>(DEFAULT_LAYOUT);
+  const [layoutStatus, setLayoutStatus] = useState('');
+  const [draggingWidget, setDraggingWidget] = useState<string | null>(null);
 
   // Payout state
   const [payouts, setPayouts] = useState<Payout[]>([]);
@@ -73,6 +108,14 @@ export default function NotesPage() {
         const data = await res.json();
         if (data.activeBackground) setActiveBackground(data.activeBackground);
         if (data.customImageUrl) setCustomImageUrl(data.customImageUrl);
+        if (data.widgetLayout) {
+          setWidgetLayout({
+            'top-left': data.widgetLayout['top-left'] || [],
+            'top-right': data.widgetLayout['top-right'] || [],
+            'bottom-left': data.widgetLayout['bottom-left'] || [],
+            'bottom-right': data.widgetLayout['bottom-right'] || [],
+          });
+        }
       }
     } catch (error) {}
   };
@@ -121,13 +164,11 @@ export default function NotesPage() {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') setIsDarkMode(true);
 
-    // Check URL params for spotify callback
     const params = new URLSearchParams(window.location.search);
     if (params.get('spotify') === 'connected') {
       setSpotifyConnected(true);
       setStatus('Spotify connected successfully!');
       setTimeout(() => setStatus(''), 3000);
-      // Clean URL
       window.history.replaceState({}, '', '/notes');
     }
   }, []);
@@ -136,6 +177,73 @@ export default function NotesPage() {
     const newMode = !isDarkMode;
     setIsDarkMode(newMode);
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
+  };
+
+  // ---- Save Settings (Layout / Background) ----
+  const handleSaveLayout = async (newLayout: WidgetLayout) => {
+    setWidgetLayout(newLayout);
+    setLayoutStatus('Saving...');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ widgetLayout: newLayout, passcode }),
+      });
+      if (res.ok) {
+        setLayoutStatus('Saved! Wallpaper updated.');
+        setTimeout(() => setLayoutStatus(''), 2500);
+      } else {
+        const data = await res.json();
+        setLayoutStatus(`Error: ${data.error || 'Failed to save'}`);
+      }
+    } catch {
+      setLayoutStatus('Failed to save layout');
+    }
+  };
+
+  // Move widget to a new corner
+  const moveWidgetToCorner = (widgetId: string, targetCorner: WidgetCorner) => {
+    const newLayout: WidgetLayout = {
+      'top-left': widgetLayout['top-left'].filter((id) => id !== widgetId),
+      'top-right': widgetLayout['top-right'].filter((id) => id !== widgetId),
+      'bottom-left': widgetLayout['bottom-left'].filter((id) => id !== widgetId),
+      'bottom-right': widgetLayout['bottom-right'].filter((id) => id !== widgetId),
+    };
+    newLayout[targetCorner].push(widgetId);
+    handleSaveLayout(newLayout);
+  };
+
+  // Reorder widget inside the same corner
+  const reorderInCorner = (corner: WidgetCorner, index: number, direction: 'up' | 'down') => {
+    const list = [...widgetLayout[corner]];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const temp = list[index];
+    list[index] = list[targetIndex];
+    list[targetIndex] = temp;
+
+    const newLayout: WidgetLayout = {
+      ...widgetLayout,
+      [corner]: list,
+    };
+    handleSaveLayout(newLayout);
+  };
+
+  // Drag and Drop handlers
+  const onDragStart = (e: React.DragEvent, widgetId: string) => {
+    setDraggingWidget(widgetId);
+    e.dataTransfer.setData('text/plain', widgetId);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const onDropCorner = (corner: WidgetCorner) => {
+    if (!draggingWidget) return;
+    moveWidgetToCorner(draggingWidget, corner);
+    setDraggingWidget(null);
   };
 
   const handleSaveNote = async (e: React.FormEvent) => {
@@ -336,7 +444,14 @@ export default function NotesPage() {
     }
   };
 
-  // Sort payouts by date, newest first
+  // Helper to find which corner a widget belongs to
+  const getWidgetCurrentCorner = (widgetId: string): WidgetCorner => {
+    for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const) {
+      if (widgetLayout[corner]?.includes(widgetId)) return corner;
+    }
+    return 'top-right';
+  };
+
   const sortedPayouts = [...payouts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const totalPayout = payouts.reduce((sum, p) => sum + p.amount, 0);
   const percentage = payoutGoal > 0 ? Math.min((totalPayout / payoutGoal) * 100, 100) : 0;
@@ -383,6 +498,162 @@ export default function NotesPage() {
           </button>
         </div>
 
+        {/* ======== DESKTOP WIDGET LAYOUT MANAGER ======== */}
+        <div className="liquid-glass-panel">
+          <div className="liquid-glass-content p-8 space-y-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+                <h2 className="text-2xl font-bold drop-shadow-sm">Widget Layout Manager</h2>
+              </div>
+              {layoutStatus && (
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 animate-pulse">
+                  {layoutStatus}
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs opacity-70 leading-relaxed">
+              Drag and drop widgets into any corner of your desktop, or use the quick corner selectors below. Reorder within corners using the ▲ ▼ arrows.
+            </p>
+
+            {/* Visual 16:9 Desktop Canvas */}
+            <div className={`aspect-[16/10] w-full rounded-2xl border p-3 grid grid-cols-2 grid-rows-2 gap-3 relative transition-all ${
+              isDarkMode ? 'bg-black/40 border-white/15' : 'bg-white/40 border-black/10'
+            }`}>
+              {/* Subtle Center Note Indicator */}
+              <div className="absolute inset-x-1/4 bottom-3 h-10 border border-dashed border-white/20 rounded-xl flex items-center justify-center pointer-events-none z-0">
+                <span className="text-[10px] uppercase font-mono opacity-40">Center Notes Area</span>
+              </div>
+
+              {/* 4 Corner Drop Zones */}
+              {CORNERS.map((corner) => {
+                const cornerWidgets = widgetLayout[corner.id] || [];
+                const isDragTarget = draggingWidget !== null;
+
+                return (
+                  <div
+                    key={corner.id}
+                    onDragOver={onDragOver}
+                    onDrop={() => onDropCorner(corner.id)}
+                    className={`rounded-xl border border-dashed p-2.5 flex flex-col justify-between transition-all relative z-10 min-h-[90px] ${
+                      isDragTarget
+                        ? (isDarkMode ? 'border-blue-400/50 bg-blue-500/10' : 'border-blue-500/50 bg-blue-500/5')
+                        : (isDarkMode ? 'border-white/10 bg-white/5' : 'border-black/10 bg-white/30')
+                    }`}
+                  >
+                    {/* Corner Header */}
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                        {corner.icon} {corner.label}
+                      </span>
+                      <span className="text-[10px] font-mono opacity-40">
+                        {cornerWidgets.length} item{cornerWidgets.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+
+                    {/* Widgets in this corner */}
+                    <div className="flex-1 flex flex-col gap-1.5 justify-start">
+                      {cornerWidgets.length === 0 ? (
+                        <div className="h-full flex items-center justify-center py-2">
+                          <span className="text-[10px] opacity-30 italic">Drop here</span>
+                        </div>
+                      ) : (
+                        cornerWidgets.map((wId, idx) => {
+                          const info = WIDGET_INFO[wId] || { name: wId, icon: '📦', desc: '' };
+                          return (
+                            <div
+                              key={wId}
+                              draggable
+                              onDragStart={(e) => onDragStart(e, wId)}
+                              className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between text-xs cursor-grab active:cursor-grabbing select-none transition-all ${
+                                isDarkMode
+                                  ? 'bg-white/10 border-white/15 hover:bg-white/15 text-white'
+                                  : 'bg-white border-black/10 hover:bg-gray-50 text-gray-900 shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span>{info.icon}</span>
+                                <span className="font-semibold truncate">{info.name}</span>
+                              </div>
+
+                              {/* Reorder arrows */}
+                              <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
+                                {idx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => reorderInCorner(corner.id, idx, 'up')}
+                                    className="p-0.5 hover:bg-white/20 rounded text-[9px] opacity-70 hover:opacity-100"
+                                    title="Move up"
+                                  >
+                                    ▲
+                                  </button>
+                                )}
+                                {idx < cornerWidgets.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => reorderInCorner(corner.id, idx, 'down')}
+                                    className="p-0.5 hover:bg-white/20 rounded text-[9px] opacity-70 hover:opacity-100"
+                                    title="Move down"
+                                  >
+                                    ▼
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick-Corner Buttons / Fallback Selectors */}
+            <div className="space-y-2 pt-2">
+              <span className="block text-xs font-semibold opacity-70">Quick Corner Switch:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {Object.entries(WIDGET_INFO).map(([wId, info]) => {
+                  const currentCorner = getWidgetCurrentCorner(wId);
+                  return (
+                    <div
+                      key={wId}
+                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                        isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white/40 border-black/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-base">{info.icon}</span>
+                        <div className="truncate">
+                          <div className="text-xs font-semibold truncate">{info.name}</div>
+                          <div className="text-[10px] opacity-50">{info.desc}</div>
+                        </div>
+                      </div>
+
+                      <select
+                        value={currentCorner}
+                        onChange={(e) => moveWidgetToCorner(wId, e.target.value as WidgetCorner)}
+                        className={`text-xs rounded-lg px-2 py-1 border focus:ring-1 focus:ring-blue-500 focus:outline-none appearance-none transition-colors ${
+                          isDarkMode ? 'bg-black/40 border-white/15 text-white' : 'bg-white border-black/15 text-black'
+                        }`}
+                      >
+                        {CORNERS.map((c) => (
+                          <option key={c.id} value={c.id} className="text-black">
+                            {c.icon} {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* ======== Settings & Notes Form Panel ======== */}
         <div className="liquid-glass-panel">
           <form onSubmit={handleSaveNote} className="liquid-glass-content p-8 space-y-6">
@@ -407,8 +678,10 @@ export default function NotesPage() {
                   onChange={(e) => handleChangeBackground(e.target.value)}
                   className={`${inputClass} appearance-none`}
                 >
-                  {BACKGROUNDS.map(bg => (
-                    <option key={bg.id} value={bg.id} className="text-black">{bg.name}</option>
+                  {BACKGROUNDS.map((bg) => (
+                    <option key={bg.id} value={bg.id} className="text-black">
+                      {bg.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -470,7 +743,9 @@ export default function NotesPage() {
                     {spotifyConnected ? '✓ Connected' : 'Connect Spotify'}
                   </a>
                   {spotifyConnected && (
-                    <span className={`text-xs ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>Click to reconnect</span>
+                    <span className={`text-xs ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
+                      Active scrobbling via Last.fm (StarSumit)
+                    </span>
                   )}
                 </div>
               </div>

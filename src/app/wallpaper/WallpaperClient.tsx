@@ -40,6 +40,20 @@ type WeatherData = {
   city: string;
 };
 
+type WidgetLayout = {
+  'top-left': string[];
+  'top-right': string[];
+  'bottom-left': string[];
+  'bottom-right': string[];
+};
+
+const DEFAULT_LAYOUT: WidgetLayout = {
+  'top-left': [],
+  'top-right': ['payout', 'clock', 'weather'],
+  'bottom-left': ['spotify'],
+  'bottom-right': [],
+};
+
 // ---------- Weather SVG Icons ----------
 function WeatherIcon({ icon, isDay }: { icon: string; isDay: boolean }) {
   const cls = "h-10 w-10 drop-shadow-lg";
@@ -106,7 +120,6 @@ function WeatherIcon({ icon, isDay }: { icon: string; isDay: boolean }) {
       </svg>
     );
   }
-  // fallback
   return (
     <svg xmlns="http://www.w3.org/2000/svg" className={cls} viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="4" fill="#FBBF24" />
@@ -118,6 +131,7 @@ export default function WallpaperClient() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeBackground, setActiveBackground] = useState('Untitledblend');
   const [customImageUrl, setCustomImageUrl] = useState('');
+  const [widgetLayout, setWidgetLayout] = useState<WidgetLayout>(DEFAULT_LAYOUT);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [payoutGoal, setPayoutGoal] = useState(1000);
   const [now, setNow] = useState(new Date());
@@ -148,6 +162,14 @@ export default function WallpaperClient() {
         const data = await settingsRes.json();
         if (data.activeBackground) setActiveBackground(data.activeBackground);
         if (data.customImageUrl) setCustomImageUrl(data.customImageUrl);
+        if (data.widgetLayout) {
+          setWidgetLayout({
+            'top-left': data.widgetLayout['top-left'] || [],
+            'top-right': data.widgetLayout['top-right'] || [],
+            'bottom-left': data.widgetLayout['bottom-left'] || [],
+            'bottom-right': data.widgetLayout['bottom-right'] || [],
+          });
+        }
       }
       if (payoutsRes.ok) {
         const data = await payoutsRes.json();
@@ -182,7 +204,7 @@ export default function WallpaperClient() {
 
   useEffect(() => {
     fetchWeather();
-    const slow = setInterval(fetchWeather, 300000); // 5 minutes
+    const slow = setInterval(fetchWeather, 300000);
     return () => clearInterval(slow);
   }, [fetchWeather]);
 
@@ -210,61 +232,55 @@ export default function WallpaperClient() {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  return (
-    <>
-      {activeBackground === 'Custom' ? (
-        <div
-          className="fixed inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: customImageUrl ? `url(${customImageUrl})` : 'none', backgroundColor: '#000' }}
-        />
-      ) : (
-        <BackgroundComponent />
-      )}
-
-      {/* ========== TOP-RIGHT WIDGET COLUMN ========== */}
-      <div className="absolute top-8 right-8 z-20 pointer-events-none flex flex-col gap-4 items-end">
-
-        {/* Payout Tracker */}
-        <div className="payout-tracker-card">
-          <div className="payout-tracker-content">
-            <div className="flex items-center gap-2 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-semibold text-white/80 tracking-wide uppercase">Payout Tracker</span>
-            </div>
-            <div className="mb-1">
-              <span className="text-3xl font-bold text-white tracking-tight">
-                ${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-              <span className="text-lg text-white/50 font-medium ml-1">
-                / ${payoutGoal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-            </div>
-            <div className="text-xs font-mono text-white/60 mb-3">
-              {percentage.toFixed(1)}% of goal
-            </div>
-            <div className="payout-progress-track">
-              <div className="payout-progress-fill" style={{ width: `${percentage}%` }} />
+  // Render individual widgets
+  const renderWidget = (widgetId: string) => {
+    switch (widgetId) {
+      case 'payout':
+        return (
+          <div key="payout" className="payout-tracker-card">
+            <div className="payout-tracker-content">
+              <div className="flex items-center gap-2 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-white/80 tracking-wide uppercase">Payout Tracker</span>
+              </div>
+              <div className="mb-1">
+                <span className="text-3xl font-bold text-white tracking-tight">
+                  ${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </span>
+                <span className="text-lg text-white/50 font-medium ml-1">
+                  / ${payoutGoal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="text-xs font-mono text-white/60 mb-3">
+                {percentage.toFixed(1)}% of goal
+              </div>
+              <div className="payout-progress-track">
+                <div className="payout-progress-fill" style={{ width: `${percentage}%` }} />
+              </div>
             </div>
           </div>
-        </div>
+        );
 
-        {/* Clock */}
-        <div className="payout-tracker-card">
-          <div className="payout-tracker-content">
-            <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-white tracking-tight tabular-nums">{timeStr}</span>
-              <span className="text-lg font-medium text-white/40 tabular-nums">{secondsStr}</span>
-              <span className="text-sm font-semibold text-white/60 ml-1 uppercase">{ampm}</span>
+      case 'clock':
+        return (
+          <div key="clock" className="payout-tracker-card">
+            <div className="payout-tracker-content">
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-white tracking-tight tabular-nums">{timeStr}</span>
+                <span className="text-lg font-medium text-white/40 tabular-nums">{secondsStr}</span>
+                <span className="text-sm font-semibold text-white/60 ml-1 uppercase">{ampm}</span>
+              </div>
+              <div className="text-xs font-medium text-white/50 mt-2 tracking-wide">{dateStr}</div>
             </div>
-            <div className="text-xs font-medium text-white/50 mt-2 tracking-wide">{dateStr}</div>
           </div>
-        </div>
+        );
 
-        {/* Weather */}
-        {weather && (
-          <div className="payout-tracker-card">
+      case 'weather':
+        if (!weather) return null;
+        return (
+          <div key="weather" className="payout-tracker-card">
             <div className="payout-tracker-content">
               <div className="flex items-center justify-between">
                 <div>
@@ -290,17 +306,14 @@ export default function WallpaperClient() {
               </div>
             </div>
           </div>
-        )}
-      </div>
+        );
 
-      {/* ========== SPOTIFY NOW PLAYING — BOTTOM LEFT (CLEARS DESKTOP ICONS) ========== */}
-      {spotify.title && (
-        <div className="absolute bottom-14 left-[210px] z-20 pointer-events-none" 
-             style={{ animation: 'floatIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' }}>
-          <div className="payout-tracker-card" style={{ width: '320px' }}>
+      case 'spotify':
+        if (!spotify.title) return null;
+        return (
+          <div key="spotify" className="payout-tracker-card" style={{ width: '320px' }}>
             <div className="payout-tracker-content">
               <div className="flex gap-4">
-                {/* Album Art */}
                 {spotify.albumArt && (
                   <div className="flex-shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -312,7 +325,6 @@ export default function WallpaperClient() {
                     />
                   </div>
                 )}
-                {/* Track Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="#1DB954">
@@ -321,9 +333,8 @@ export default function WallpaperClient() {
                     <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">
                       {spotify.isPlaying ? 'Now Playing' : 'Paused'}
                     </span>
-                    {/* Equalizer bars */}
                     <div className="flex items-end gap-[2px] h-4 ml-auto">
-                      {[0,1,2,3].map(i => (
+                      {[0, 1, 2, 3].map((i) => (
                         <div key={i} className={spotify.isPlaying ? 'eq-bar' : 'eq-bar-paused'} />
                       ))}
                     </div>
@@ -332,7 +343,6 @@ export default function WallpaperClient() {
                   <div className="text-xs text-white/50 truncate mt-0.5">{spotify.artist}</div>
                 </div>
               </div>
-              {/* Progress Bar */}
               {spotify.duration && spotify.duration > 0 && (
                 <div>
                   <div className="spotify-progress-track">
@@ -346,8 +356,42 @@ export default function WallpaperClient() {
               )}
             </div>
           </div>
-        </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  // Corner positioning classes with taskbar-safe padding
+  const cornerStyles = {
+    'top-left': 'absolute top-8 left-12 z-20 pointer-events-none flex flex-col gap-4 items-start',
+    'top-right': 'absolute top-8 right-8 z-20 pointer-events-none flex flex-col gap-4 items-end',
+    'bottom-left': 'absolute bottom-24 left-12 z-20 pointer-events-none flex flex-col gap-4 items-start',
+    'bottom-right': 'absolute bottom-24 right-8 z-20 pointer-events-none flex flex-col gap-4 items-end',
+  };
+
+  return (
+    <>
+      {activeBackground === 'Custom' ? (
+        <div
+          className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: customImageUrl ? `url(${customImageUrl})` : 'none', backgroundColor: '#000' }}
+        />
+      ) : (
+        <BackgroundComponent />
       )}
+
+      {/* Render each dynamic corner */}
+      {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => {
+        const widgets = widgetLayout[corner] || [];
+        if (widgets.length === 0) return null;
+        return (
+          <div key={corner} className={cornerStyles[corner]}>
+            {widgets.map((widgetId) => renderWidget(widgetId))}
+          </div>
+        );
+      })}
 
       {/* ========== NOTES — BOTTOM CENTER ========== */}
       <div className="absolute inset-0 z-10 pointer-events-none p-12 overflow-hidden flex flex-col justify-end bg-gradient-to-t from-black/20 to-transparent">
