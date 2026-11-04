@@ -22,6 +22,13 @@ export default function WallpaperClient() {
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [payoutGoal, setPayoutGoal] = useState(1000);
+  const [now, setNow] = useState(new Date());
+
+  // Real-time clock — tick every second
+  useEffect(() => {
+    const clockInterval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(clockInterval);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -53,10 +60,7 @@ export default function WallpaperClient() {
       }
     };
 
-    // Fetch immediately on mount
     fetchData();
-
-    // Poll every 5 seconds
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -66,6 +70,16 @@ export default function WallpaperClient() {
 
   const totalPayout = payouts.reduce((sum, p) => sum + p.amount, 0);
   const percentage = payoutGoal > 0 ? Math.min((totalPayout / payoutGoal) * 100, 100) : 0;
+
+  // Clock formatting
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  const timeStr = `${displayHours}:${String(minutes).padStart(2, '0')}`;
+  const secondsStr = `:${String(seconds).padStart(2, '0')}`;
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
     <>
@@ -78,11 +92,12 @@ export default function WallpaperClient() {
         <BackgroundComponent />
       )}
 
-      {/* Payout Tracker — top right */}
-      <div className="absolute top-8 right-8 z-20 pointer-events-none">
+      {/* Widgets — top right, stacked */}
+      <div className="absolute top-8 right-8 z-20 pointer-events-none flex flex-col gap-4 items-end">
+        
+        {/* Payout Tracker */}
         <div className="payout-tracker-card">
           <div className="payout-tracker-content">
-            {/* Header */}
             <div className="flex items-center gap-2 mb-4">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -90,7 +105,6 @@ export default function WallpaperClient() {
               <span className="text-sm font-semibold text-white/80 tracking-wide uppercase">Payout Tracker</span>
             </div>
 
-            {/* Amount */}
             <div className="mb-1">
               <span className="text-3xl font-bold text-white tracking-tight">
                 ${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -100,12 +114,10 @@ export default function WallpaperClient() {
               </span>
             </div>
 
-            {/* Percentage */}
             <div className="text-xs font-mono text-white/60 mb-3">
               {percentage.toFixed(1)}% of goal
             </div>
 
-            {/* Progress Bar */}
             <div className="payout-progress-track">
               <div 
                 className="payout-progress-fill"
@@ -114,6 +126,27 @@ export default function WallpaperClient() {
             </div>
           </div>
         </div>
+
+        {/* Real-Time Clock */}
+        <div className="payout-tracker-card">
+          <div className="payout-tracker-content">
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-bold text-white tracking-tight tabular-nums">
+                {timeStr}
+              </span>
+              <span className="text-lg font-medium text-white/40 tabular-nums">
+                {secondsStr}
+              </span>
+              <span className="text-sm font-semibold text-white/60 ml-1 uppercase">
+                {ampm}
+              </span>
+            </div>
+            <div className="text-xs font-medium text-white/50 mt-2 tracking-wide">
+              {dateStr}
+            </div>
+          </div>
+        </div>
+
       </div>
       
       {/* Notes — bottom */}
