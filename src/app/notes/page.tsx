@@ -49,6 +49,13 @@ export default function NotesPage() {
   const [goalInput, setGoalInput] = useState('');
   const [payoutStatus, setPayoutStatus] = useState('');
 
+  // Weather state
+  const [weatherCity, setWeatherCity] = useState('');
+  const [weatherStatus, setWeatherStatus] = useState('');
+
+  // Spotify state
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
+
   const fetchNotes = async () => {
     try {
       const res = await fetch('/api/notes', { cache: 'no-store' });
@@ -85,12 +92,44 @@ export default function NotesPage() {
     } catch (error) {}
   };
 
+  const fetchWeatherCity = async () => {
+    try {
+      const res = await fetch('/api/weather', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.city) setWeatherCity(data.city);
+      }
+    } catch {}
+  };
+
+  const checkSpotifyStatus = async () => {
+    try {
+      const res = await fetch('/api/spotify/now-playing', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setSpotifyConnected(!data.needsAuth);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     fetchNotes();
     fetchSettings();
     fetchPayouts();
+    fetchWeatherCity();
+    checkSpotifyStatus();
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') setIsDarkMode(true);
+
+    // Check URL params for spotify callback
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('spotify') === 'connected') {
+      setSpotifyConnected(true);
+      setStatus('Spotify connected successfully!');
+      setTimeout(() => setStatus(''), 3000);
+      // Clean URL
+      window.history.replaceState({}, '', '/notes');
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -162,7 +201,6 @@ export default function NotesPage() {
     setActiveBackground(newBg);
     const url = urlStr !== undefined ? urlStr : customImageUrl;
     if (urlStr !== undefined) setCustomImageUrl(urlStr);
-    
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -274,6 +312,30 @@ export default function NotesPage() {
     setEditAmount(String(payout.amount));
   };
 
+  // ---- Weather handler ----
+  const handleSetWeatherCity = async () => {
+    if (!weatherCity.trim()) return;
+    setWeatherStatus('Searching...');
+    try {
+      const res = await fetch('/api/weather', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: weatherCity.trim(), passcode }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWeatherCity(data.city);
+        setWeatherStatus(`Set to ${data.city}`);
+        setTimeout(() => setWeatherStatus(''), 2000);
+      } else {
+        const data = await res.json();
+        setWeatherStatus(`Error: ${data.error}`);
+      }
+    } catch {
+      setWeatherStatus('Failed');
+    }
+  };
+
   // Sort payouts by date, newest first
   const sortedPayouts = [...payouts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const totalPayout = payouts.reduce((sum, p) => sum + p.amount, 0);
@@ -292,11 +354,11 @@ export default function NotesPage() {
 
   return (
     <div className={`min-h-screen relative font-sans pb-24 ${isDarkMode ? 'dark text-white' : 'text-gray-900'}`}>
-      
-      {/* Background layer for liquid glass to refract */}
+
+      {/* Background layer */}
       <div className="fixed inset-0 z-0">
         {activeBackground === 'Custom' ? (
-          <div 
+          <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-1000"
             style={{ backgroundImage: customImageUrl ? `url(${customImageUrl})` : 'none', backgroundColor: isDarkMode ? '#1a1a2e' : '#f0f0f5' }}
           />
@@ -310,18 +372,18 @@ export default function NotesPage() {
 
       {/* Main Content */}
       <div className="relative z-10 max-w-2xl mx-auto space-y-8 p-8 pt-16">
-        
+
         <div className="flex justify-between items-center">
           <h1 className="text-4xl font-bold tracking-tight drop-shadow-sm">Dashboard</h1>
-          <button 
+          <button
             onClick={toggleTheme}
             className={`px-4 py-2 rounded-full font-medium transition-all ${isDarkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/5 hover:bg-black/10 text-black'}`}
           >
             {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
           </button>
         </div>
-        
-        {/* Notes Form Panel */}
+
+        {/* ======== Settings & Notes Form Panel ======== */}
         <div className="liquid-glass-panel">
           <form onSubmit={handleSaveNote} className="liquid-glass-content p-8 space-y-6">
             <div>
@@ -336,7 +398,8 @@ export default function NotesPage() {
               />
             </div>
 
-            <div className={`pt-6 pb-6 border-t border-b space-y-4 ${isDarkMode ? 'border-white/10' : 'border-black/10'}`}>
+            <div className={`pt-6 pb-6 border-t border-b space-y-5 ${isDarkMode ? 'border-white/10' : 'border-black/10'}`}>
+              {/* Background */}
               <div>
                 <label className="block text-sm font-semibold mb-2 opacity-80">Wallpaper Background</label>
                 <select
@@ -349,7 +412,7 @@ export default function NotesPage() {
                   ))}
                 </select>
               </div>
-              
+
               {activeBackground === 'Custom' && (
                 <div className="animate-fade-in">
                   <label className="block text-sm font-semibold mb-2 opacity-80">Custom Image URL</label>
@@ -363,6 +426,54 @@ export default function NotesPage() {
                   />
                 </div>
               )}
+
+              {/* Weather Location */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 opacity-80">Weather Location</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={weatherCity}
+                    onChange={(e) => setWeatherCity(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleSetWeatherCity())}
+                    className={`${smallInputClass} flex-1`}
+                    placeholder="Enter city name..."
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSetWeatherCity}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      isDarkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/5 hover:bg-black/10 text-black'
+                    }`}
+                  >
+                    Set
+                  </button>
+                </div>
+                {weatherStatus && <p className="text-xs mt-1.5 opacity-70">{weatherStatus}</p>}
+              </div>
+
+              {/* Spotify Connection */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 opacity-80">Spotify</label>
+                <div className="flex items-center gap-3">
+                  <a
+                    href="/api/spotify/login"
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      spotifyConnected
+                        ? (isDarkMode ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25' : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20')
+                        : 'bg-[#1DB954]/90 hover:bg-[#1DB954] text-white shadow-lg hover:shadow-[#1DB954]/25 hover:-translate-y-0.5'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                    {spotifyConnected ? '✓ Connected' : 'Connect Spotify'}
+                  </a>
+                  {spotifyConnected && (
+                    <span className={`text-xs ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>Click to reconnect</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div>
@@ -388,7 +499,7 @@ export default function NotesPage() {
           </form>
         </div>
 
-        {/* Payout Tracker Panel */}
+        {/* ======== Payout Tracker Panel ======== */}
         <div className="liquid-glass-panel">
           <div className="liquid-glass-content p-8">
             <div className="flex justify-between items-center mb-6">
@@ -417,9 +528,9 @@ export default function NotesPage() {
                 </span>
               </div>
               <div className={`w-full h-2 rounded-full overflow-hidden ${isDarkMode ? 'bg-white/10' : 'bg-black/10'}`}>
-                <div 
+                <div
                   className="h-full rounded-full transition-all duration-700"
-                  style={{ 
+                  style={{
                     width: `${percentage}%`,
                     background: 'linear-gradient(90deg, #34d399, #10b981, #059669)',
                     boxShadow: '0 0 12px rgba(52, 211, 153, 0.4)'
@@ -490,37 +601,13 @@ export default function NotesPage() {
                     isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white/40 border-white/40'
                   }`}>
                     {editingPayoutId === payout.id ? (
-                      /* Edit mode */
                       <div className="flex items-center gap-3">
-                        <input
-                          type="date"
-                          value={editDate}
-                          onChange={(e) => setEditDate(e.target.value)}
-                          className={smallInputClass + ' flex-1'}
-                        />
-                        <input
-                          type="number"
-                          value={editAmount}
-                          onChange={(e) => setEditAmount(e.target.value)}
-                          className={smallInputClass + ' w-24'}
-                          min="0"
-                          step="0.01"
-                        />
-                        <button
-                          onClick={() => handleEditPayout(payout.id)}
-                          className="text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setEditingPayoutId(null)}
-                          className="text-xs font-semibold opacity-60 hover:opacity-100 transition-opacity"
-                        >
-                          Cancel
-                        </button>
+                        <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={smallInputClass + ' flex-1'} />
+                        <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={smallInputClass + ' w-24'} min="0" step="0.01" />
+                        <button onClick={() => handleEditPayout(payout.id)} className="text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors">Save</button>
+                        <button onClick={() => setEditingPayoutId(null)} className="text-xs font-semibold opacity-60 hover:opacity-100 transition-opacity">Cancel</button>
                       </div>
                     ) : (
-                      /* View mode */
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <span className="text-xs font-mono opacity-60">
@@ -531,18 +618,8 @@ export default function NotesPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => startEditing(payout)}
-                            className={`text-xs font-semibold transition-colors ${isDarkMode ? 'text-white/40 hover:text-white/80' : 'text-black/40 hover:text-black/80'}`}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeletePayout(payout.id)}
-                            className="text-xs text-red-500 hover:text-red-400 font-semibold opacity-80 hover:opacity-100 transition-opacity"
-                          >
-                            Delete
-                          </button>
+                          <button onClick={() => startEditing(payout)} className={`text-xs font-semibold transition-colors ${isDarkMode ? 'text-white/40 hover:text-white/80' : 'text-black/40 hover:text-black/80'}`}>Edit</button>
+                          <button onClick={() => handleDeletePayout(payout.id)} className="text-xs text-red-500 hover:text-red-400 font-semibold opacity-80 hover:opacity-100 transition-opacity">Delete</button>
                         </div>
                       </div>
                     )}
@@ -553,7 +630,7 @@ export default function NotesPage() {
           </div>
         </div>
 
-        {/* Current Notes Panel */}
+        {/* ======== Current Notes Panel ======== */}
         <div className="liquid-glass-panel">
           <div className="liquid-glass-content p-8">
             <div className="flex justify-between items-center mb-6">
@@ -571,14 +648,14 @@ export default function NotesPage() {
               ) : (
                 notes.map((note) => (
                   <div key={note.id} className={`p-5 rounded-2xl border transition-all flex gap-4 ${
-                    isDarkMode 
-                      ? (note.selected ? 'bg-blue-500/20 border-blue-400/30' : 'bg-white/5 border-white/10') 
+                    isDarkMode
+                      ? (note.selected ? 'bg-blue-500/20 border-blue-400/30' : 'bg-white/5 border-white/10')
                       : (note.selected ? 'bg-blue-500/10 border-blue-400/30' : 'bg-white/40 border-white/40')
                   }`}>
                     <div className="pt-1">
-                      <input 
-                        type="checkbox" 
-                        checked={!!note.selected} 
+                      <input
+                        type="checkbox"
+                        checked={!!note.selected}
                         onChange={() => handleToggleSelect(note)}
                         className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer bg-black/10"
                         title="Show SVG bullet on wallpaper"
@@ -587,9 +664,7 @@ export default function NotesPage() {
                     <div className="flex-1">
                       <p className="whitespace-pre-wrap text-lg leading-relaxed">{note.text}</p>
                       <div className="flex justify-between items-center mt-3">
-                        <p className="text-xs font-mono opacity-60">
-                          {new Date(note.createdAt).toLocaleString()}
-                        </p>
+                        <p className="text-xs font-mono opacity-60">{new Date(note.createdAt).toLocaleString()}</p>
                         <button onClick={() => handleDelete(note.id)} className="text-xs text-red-500 hover:text-red-400 font-semibold opacity-80 hover:opacity-100 transition-opacity">Delete</button>
                       </div>
                     </div>
@@ -599,7 +674,7 @@ export default function NotesPage() {
             </div>
           </div>
         </div>
-        
+
       </div>
     </div>
   );
