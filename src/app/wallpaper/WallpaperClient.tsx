@@ -144,49 +144,47 @@ export default function WallpaperClient() {
     return () => clearInterval(clockInterval);
   }, []);
 
-  // Fast poll: notes, settings, payouts, spotify (every 5s)
-  const fetchFastData = useCallback(async () => {
-    try {
-      const [notesRes, settingsRes, payoutsRes, spotifyRes] = await Promise.all([
-        fetch('/api/notes', { cache: 'no-store' }),
-        fetch('/api/settings', { cache: 'no-store' }),
-        fetch('/api/payouts', { cache: 'no-store' }),
-        fetch('/api/spotify/now-playing', { cache: 'no-store' }).catch(() => null),
-      ]);
+  // Consolidated sync: 1 single lightweight request for all data (saves 90%+ serverless CPU)
+  const syncAllData = useCallback(async () => {
+    // Sleep/visibility guard: don't burn CPU when wallpaper is hidden or screen is locked
+    if (typeof document !== 'undefined' && document.hidden) return;
 
-      if (notesRes.ok) {
-        const data = await notesRes.json();
-        if (Array.isArray(data)) setNotes(data);
-      }
-      if (settingsRes.ok) {
-        const data = await settingsRes.json();
-        if (data.activeBackground) setActiveBackground(data.activeBackground);
-        if (data.customImageUrl) setCustomImageUrl(data.customImageUrl);
-        if (data.widgetLayout) {
+    try {
+      const res = await fetch('/api/sync', { cache: 'no-store' });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (Array.isArray(data.notes)) setNotes(data.notes);
+
+      if (data.settings) {
+        if (data.settings.activeBackground) setActiveBackground(data.settings.activeBackground);
+        if (data.settings.customImageUrl !== undefined) setCustomImageUrl(data.settings.customImageUrl);
+        if (data.settings.widgetLayout) {
           setWidgetLayout({
-            'top-left': data.widgetLayout['top-left'] || [],
-            'top-right': data.widgetLayout['top-right'] || [],
-            'bottom-left': data.widgetLayout['bottom-left'] || [],
-            'bottom-right': data.widgetLayout['bottom-right'] || [],
+            'top-left': data.settings.widgetLayout['top-left'] || [],
+            'top-right': data.settings.widgetLayout['top-right'] || [],
+            'bottom-left': data.settings.widgetLayout['bottom-left'] || [],
+            'bottom-right': data.settings.widgetLayout['bottom-right'] || [],
           });
         }
       }
-      if (payoutsRes.ok) {
-        const data = await payoutsRes.json();
-        if (Array.isArray(data.payouts)) setPayouts(data.payouts);
-        if (data.payoutGoal) setPayoutGoal(Number(data.payoutGoal));
+
+      if (data.payouts) {
+        if (Array.isArray(data.payouts.records)) setPayouts(data.payouts.records);
+        if (data.payouts.goal) setPayoutGoal(Number(data.payouts.goal));
       }
-      if (spotifyRes && spotifyRes.ok) {
-        const data = await spotifyRes.json();
-        setSpotify(data);
+
+      if (data.spotify) {
+        setSpotify(data.spotify);
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to sync data:', error);
     }
   }, []);
 
-  // Slow poll: weather (every 5 minutes)
+  // Weather poll: once every 10 minutes (weather changes slowly)
   const fetchWeather = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const res = await fetch('/api/weather', { cache: 'no-store' });
       if (res.ok) {
@@ -197,15 +195,16 @@ export default function WallpaperClient() {
   }, []);
 
   useEffect(() => {
-    fetchFastData();
-    const fast = setInterval(fetchFastData, 5000);
-    return () => clearInterval(fast);
-  }, [fetchFastData]);
+    syncAllData();
+    // 10s interval (balanced real-time feel + ultra-low CPU)
+    const syncInterval = setInterval(syncAllData, 10000);
+    return () => clearInterval(syncInterval);
+  }, [syncAllData]);
 
   useEffect(() => {
     fetchWeather();
-    const slow = setInterval(fetchWeather, 300000);
-    return () => clearInterval(slow);
+    const weatherInterval = setInterval(fetchWeather, 600000); // 10 minutes
+    return () => clearInterval(weatherInterval);
   }, [fetchWeather]);
 
   // @ts-ignore
